@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Building2, Search, ChevronDown, Check, Plus } from "lucide-react";
+import { Building2, Search, ChevronDown, Check, Plus, Sparkles, Loader2 } from "lucide-react";
 import { searchColleges, getCollegesByState, getAllColleges, searchAllColleges } from "../data/collegesData";
+import { searchCollegesWithAI, isGeminiConfigured } from "../services/geminiService";
 
 interface CollegeSearchDropdownProps {
   state?: string;
@@ -25,10 +26,13 @@ export function CollegeSearchDropdown({
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customCollege, setCustomCollege] = useState("");
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [isAiSearching, setIsAiSearching] = useState(false);
   
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const aiSearchTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Get filtered colleges based on search
   const filteredColleges = showAllColleges 
@@ -61,7 +65,34 @@ export function CollegeSearchDropdown({
   // Reset highlighted index when search changes
   useEffect(() => {
     setHighlightedIndex(0);
-  }, [searchQuery]);
+    setAiSuggestions([]);
+    
+    // Clear previous timeout
+    if (aiSearchTimeout.current) {
+      clearTimeout(aiSearchTimeout.current);
+    }
+
+    // Debounced AI search if no local results and query is long enough
+    if (searchQuery.length >= 3 && filteredColleges.length === 0 && isGeminiConfigured()) {
+      aiSearchTimeout.current = setTimeout(async () => {
+        setIsAiSearching(true);
+        try {
+          const suggestions = await searchCollegesWithAI(searchQuery);
+          setAiSuggestions(suggestions);
+        } catch (error) {
+          console.error("AI search failed:", error);
+        } finally {
+          setIsAiSearching(false);
+        }
+      }, 800);
+    }
+
+    return () => {
+      if (aiSearchTimeout.current) {
+        clearTimeout(aiSearchTimeout.current);
+      }
+    };
+  }, [searchQuery, filteredColleges.length]);
 
   // Scroll highlighted item into view
   useEffect(() => {
@@ -278,7 +309,39 @@ export function CollegeSearchDropdown({
                       ))
                     ) : (
                       <div className={`px-4 py-3 text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                        No colleges found matching "{searchQuery}"
+                        {isAiSearching ? (
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                            <span>Searching globally for "{searchQuery}"...</span>
+                          </div>
+                        ) : (
+                          <span>No colleges found matching "{searchQuery}"</span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* AI Suggestions */}
+                    {!isAiSearching && aiSuggestions.length > 0 && (
+                      <div className={`p-2 bg-purple-50/50 dark:bg-purple-900/10 border-y ${isDarkMode ? "border-purple-900/30" : "border-purple-100"}`}>
+                        <div className="flex items-center gap-2 px-2 py-1 mb-1">
+                          <Sparkles className="w-3 h-3 text-purple-500" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Global AI Suggestions</span>
+                        </div>
+                        {aiSuggestions.map((college, index) => (
+                          <button
+                            key={`ai-${college}`}
+                            type="button"
+                            onClick={() => handleSelectCollege(college)}
+                            className={`w-full px-3 py-2 rounded-lg text-left text-sm flex items-center justify-between transition-colors ${
+                              isDarkMode
+                                ? "hover:bg-purple-900/30 text-gray-200"
+                                : "hover:bg-purple-50 text-purple-900"
+                            }`}
+                          >
+                            <span className="truncate pr-2">{college}</span>
+                            <Plus className="w-3 h-3 opacity-50" />
+                          </button>
+                        ))}
                       </div>
                     )}
 

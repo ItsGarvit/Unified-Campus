@@ -175,3 +175,56 @@ Return ONLY the valid JSON object, no other text.`;
 export function isGeminiConfigured(): boolean {
   return !!GEMINI_API_KEY;
 }
+
+/**
+ * Search for colleges globally using Gemini AI
+ */
+export async function searchCollegesWithAI(query: string): Promise<string[]> {
+  if (!GEMINI_API_KEY) {
+    return [];
+  }
+
+  const prompt = `Search for colleges/universities globally that match the query: "${query}". 
+  Return a JSON array of strings containing only the top 5 most relevant college names. 
+  Each name should be the full, official name of the institution.
+  Return ONLY the JSON array, no other text.`;
+
+  try {
+    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: prompt }]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.2, // Lower temperature for more consistent results
+          maxOutputTokens: 500,
+          responseMimeType: "application/json"
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const data: GeminiResponse = await response.json();
+    const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!textContent) {
+      return [];
+    }
+
+    const colleges = JSON.parse(textContent) as string[];
+    return Array.isArray(colleges) ? colleges : [];
+
+  } catch (error) {
+    console.error('Error searching colleges with Gemini:', error);
+    return [];
+  }
+}
