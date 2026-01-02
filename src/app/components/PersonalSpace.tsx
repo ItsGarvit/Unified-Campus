@@ -76,7 +76,7 @@ interface RecommendedPath {
 }
 
 const NOTES_KEY = "unifiedcampus_notes_";
-const PRACTICE_TESTS_KEY = "unifiedcampus_practice_tests";
+const PRACTICE_TESTS_KEY = "unifiedcampus_practice_tests_";
 const CAREER_PATH_KEY = "unifiedcampus_career_path_";
 const CAREER_ONBOARDING_KEY =
   "unifiedcampus_career_onboarding_";
@@ -141,7 +141,7 @@ export function PersonalSpace({
   };
 
   const loadPracticeTests = () => {
-    const stored = localStorage.getItem(PRACTICE_TESTS_KEY);
+    const stored = localStorage.getItem(PRACTICE_TESTS_KEY + user?.id);
     if (stored) {
       setPracticeTests(JSON.parse(stored));
     } else {
@@ -327,7 +327,7 @@ export function PersonalSpace({
         },
       ];
       localStorage.setItem(
-        PRACTICE_TESTS_KEY,
+        PRACTICE_TESTS_KEY + user?.id,
         JSON.stringify(sampleTests),
       );
       setPracticeTests(sampleTests);
@@ -454,6 +454,12 @@ export function PersonalSpace({
   };
 
   const handleStartTest = (test: PracticeTest) => {
+    // If test is already completed, show results with existing answers
+    if (test.completed) {
+      setActiveTest(test);
+      return;
+    }
+
     setActiveTest({
       ...test,
       questions: test.questions.map((q) => ({
@@ -500,7 +506,7 @@ export function PersonalSpace({
     );
 
     localStorage.setItem(
-      PRACTICE_TESTS_KEY,
+      PRACTICE_TESTS_KEY + user?.id,
       JSON.stringify(updatedTests),
     );
     setPracticeTests(updatedTests);
@@ -708,16 +714,16 @@ export function PersonalSpace({
 
   const getCareerStreamName = (interest: string): string => {
     const streamMap: Record<string, string> = {
-      "web-dev": "Web Development",
-      "mobile-dev": "Mobile Development",
+      "web-dev": "Software Development",
+      "mobile-dev": "Software Development",
       "data-science": "Data Science",
-      devops: "DevOps",
+      devops: "Cloud & DevOps",
       "cyber-security": "Cybersecurity",
-      blockchain: "Blockchain",
-      "game-dev": "Game Development",
+      blockchain: "Software Development",
+      "game-dev": "Software Development",
       "ui-ux": "UI/UX Design",
     };
-    return streamMap[interest] || "Unknown Stream";
+    return streamMap[interest] || "Software Development";
   };
 
   const renderNotes = () => (
