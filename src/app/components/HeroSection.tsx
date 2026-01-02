@@ -39,7 +39,7 @@ export function HeroSection({ onGetStarted }: HeroSectionProps) {
 
       <div className="max-w-7xl w-full mx-auto grid md:grid-cols-2 gap-12 items-center">
         {/* Left Side - Welcome Text & CTA */}
-        <div className="space-y-8">
+        <div className="space-y-8 relative z-10">
           <motion.div
             initial={{ x: -100, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}

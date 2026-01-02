@@ -41,7 +41,7 @@ export function ContactSection() {
                   <Phone className="w-6 h-6 text-gray-900 dark:text-gray-100" />
                   <div>
                     <p className="font-semibold text-gray-900 dark:text-gray-100">Phone</p>
-                    <p className="text-gray-800 dark:text-gray-200">+1 (555) 123-4567</p>
+                    <p className="text-gray-800 dark:text-gray-200">+91 9977958848</p>
                   </div>
                 </div>
               </div>
@@ -51,7 +51,7 @@ export function ContactSection() {
                   <MapPin className="w-6 h-6 text-gray-900 dark:text-gray-100" />
                   <div>
                     <p className="font-semibold text-gray-900 dark:text-gray-100">Location</p>
-                    <p className="text-gray-800 dark:text-gray-200">San Francisco, CA</p>
+                    <p className="text-gray-800 dark:text-gray-200">Indore, MP</p>
                   </div>
                 </div>
               </div>
