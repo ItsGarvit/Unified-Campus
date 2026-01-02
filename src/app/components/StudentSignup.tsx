@@ -1,7 +1,8 @@
 import { motion } from "motion/react";
 import { useState, useEffect } from "react";
-import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowLeft, Building2, BookOpen, Calendar, MapPin, User, Phone } from "lucide-react";
+import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowLeft, BookOpen, Calendar, MapPin, User, Phone } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { CollegeSearchDropdown } from "./CollegeSearchDropdown";
 
 interface StudentSignupProps {
   onBack: () => void;
@@ -297,19 +298,17 @@ export function StudentSignup({ onBack, onSwitchToLogin, userLocation }: Student
               <label htmlFor="college" className="block font-semibold text-gray-700 dark:text-gray-300 mb-2">
                 College Name
               </label>
-              <div className="relative">
-                <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 dark:text-gray-400" />
-                <input
-                  type="text"
-                  id="college"
-                  name="college"
-                  value={formData.college}
-                  onChange={handleChange}
-                  required
-                  className="w-full pl-12 pr-4 py-3 rounded-2xl border-2 border-gray-900 dark:border-gray-100 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:focus:ring-blue-600 transition-all"
-                  placeholder="Your College Name"
-                />
-              </div>
+              <CollegeSearchDropdown
+                state={formData.state}
+                value={formData.college}
+                onChange={(college) => setFormData(prev => ({ ...prev, college }))}
+                disabled={isLoadingLocation}
+              />
+              {!formData.state && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                  Select your state first to see available colleges
+                </p>
+              )}
             </div>
 
             {/* Branch Field */}

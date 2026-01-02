@@ -17,6 +17,7 @@ export interface User {
   // Student specific fields
   phone?: string;
   college?: string;
+  collegeVerified?: boolean; // New: true if college selected from dropdown
   branch?: string;
   year?: string;
   region?: string;
@@ -38,6 +39,7 @@ interface AuthContextType {
   signup: (userData: any, password: string, userType: 'student' | 'mentor') => Promise<boolean>;
   logout: () => void;
   updateUserId: (newId: string) => Promise<boolean>;
+  updateCollege: (college: string) => Promise<boolean>;
   isAuthenticated: boolean;
   loading: boolean;
 }
@@ -156,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ...(userType === 'student' ? {
             phone: userData.phone,
             college: userData.college,
+            collegeVerified: true, // New users verified
             branch: userData.branch,
             year: userData.year,
             region: userData.region,
@@ -206,6 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ...(userType === 'student' ? {
             phone: userData.phone,
             college: userData.college,
+            collegeVerified: true, // New users verified
             branch: userData.branch,
             year: userData.year,
             region: userData.region,
@@ -388,8 +392,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateCollege = async (college: string): Promise<boolean> => {
+    try {
+      if (USE_DEMO_MODE) {
+        // Demo mode update college
+        if (!user) {
+          throw new Error('User not found');
+        }
+
+        const updatedUser: User = {
+          ...user,
+          college,
+          collegeVerified: true
+        };
+
+        // Update user in localStorage
+        const users = getDemoUsers();
+        const userIndex = users.findIndex(u => u.email === user.email);
+        if (userIndex !== -1) {
+          const passwordField = (users[userIndex] as any).password;
+          users[userIndex] = { ...updatedUser, password: passwordField } as any;
+          localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(users));
+        }
+
+        // Update current user in localStorage
+        setDemoCurrentUser(updatedUser);
+        setUser(updatedUser);
+
+        return true;
+      } else {
+        // Firebase update college
+        if (!auth || !db) {
+          throw new Error('Firebase is not configured.');
+        }
+
+        if (!user) {
+          throw new Error('User not found');
+        }
+
+        const updatedUser: User = {
+          ...user,
+          college,
+          collegeVerified: true
+        };
+
+        await setDoc(doc(db, 'users', user.id), updatedUser);
+        setUser(updatedUser);
+
+        return true;
+      }
+    } catch (error: any) {
+      console.error('Update college error:', error);
+      throw error;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout, updateUserId, isAuthenticated, loading }}>
+    <AuthContext.Provider value={{ user, login, signup, logout, updateUserId, updateCollege, isAuthenticated, loading }}>
       {!loading && children}
     </AuthContext.Provider>
   );
@@ -407,6 +466,7 @@ export function useAuth() {
         signup: async () => false,
         logout: () => {},
         updateUserId: async () => false,
+        updateCollege: async () => false,
         isAuthenticated: false,
         loading: true
       };

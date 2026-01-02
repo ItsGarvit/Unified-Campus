@@ -30,6 +30,7 @@ import { GlobalChat } from "./GlobalChat";
 import { RegionalChat } from "./RegionalChat";
 import { CollegeChat } from "./CollegeChat";
 import { PersonalSpace } from "./PersonalSpace";
+import { CollegeVerificationModal } from "./CollegeVerificationModal";
 
 export function StudentDashboard() {
   const { user, logout, updateUserId } = useAuth();
@@ -38,6 +39,9 @@ export function StudentDashboard() {
   const [isEditingId, setIsEditingId] = useState(false);
   const [newId, setNewId] = useState("");
   const [idError, setIdError] = useState("");
+  
+  // Check if user needs to verify college (existing users without verification)
+  const needsCollegeVerification = user?.userType === 'student' && user?.collegeVerified !== true;
 
   if (!user) return null;
 
@@ -94,6 +98,11 @@ export function StudentDashboard() {
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'} flex h-screen overflow-hidden`}>
+      {/* College Verification Modal for existing users */}
+      {needsCollegeVerification && (
+        <CollegeVerificationModal isDarkMode={isDarkMode} />
+      )}
+
       {/* Sidebar */}
       <aside className={`w-64 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} border-r ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} flex flex-col h-screen overflow-hidden`}>
         {/* Logo */}
