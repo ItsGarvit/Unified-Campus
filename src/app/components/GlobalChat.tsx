@@ -4,16 +4,33 @@ import { Users, Globe, Settings, Clock } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
-import { getSharedChatStorage } from "../utils/sharedChatStorage";
+// REMOVED: import { getSharedChatStorage } from "../utils/sharedChatStorage";
 import type { ChatMessage as ChatMessageType, PollData, SlowModeSettings } from "../types/chat";
+
+// --- NEW IMPORTS (FIREBASE) ---
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  serverTimestamp,
+  updateDoc,
+  doc,
+  arrayUnion
+} from "firebase/firestore";
+import { db } from "../config/firebase"; // Make sure this path matches your file structure!
 
 const GLOBAL_SLOWMODE_KEY = 'unifiedcampus_global_slowmode';
 
 export function GlobalChat({ isDarkMode }: { isDarkMode: boolean }) {
   const { user } = useAuth();
-  const chatStorage = getSharedChatStorage();
+  // REMOVED: const chatStorage = getSharedChatStorage(); 
+  
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
-  const [onlineCount, setOnlineCount] = useState(0);
+  // Note: Online count is harder with just Firestore; you might want to hardcode or remove it for now
+  const [onlineCount, setOnlineCount] = useState(1); 
+  
   const [slowMode, setSlowMode] = useState<SlowModeSettings>({
     enabled: false,
     interval: 10,
@@ -25,24 +42,38 @@ export function GlobalChat({ isDarkMode }: { isDarkMode: boolean }) {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
+  // --- NEW: FETCH MESSAGES FROM FIREBASE ---
   useEffect(() => {
-    // Load initial messages
-    const initialMessages = chatStorage.getMessages('global');
-    setMessages(initialMessages);
-    
-    // Subscribe to message updates (works across all browser tabs and users)
-    const unsubscribe = chatStorage.subscribe('global', (updatedMessages) => {
-      setMessages(updatedMessages);
+    // 1. Create a query to get messages sorted by time
+    const q = query(collection(db, "global_chat"), orderBy("createdAt", "asc"));
+
+    // 2. Listen for real-time updates
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const liveMessages = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          userId: data.userId,
+          userName: data.userName,
+          userType: data.userType,
+          message: data.message,
+          // Convert Firestore Timestamp to number (ms) or fallback to Date.now()
+          timestamp: data.createdAt?.toMillis() || Date.now(),
+          type: data.type,
+          mediaUrl: data.mediaUrl,
+          pollData: data.pollData,
+        } as ChatMessageType;
+      });
+      setMessages(liveMessages);
     });
-    
+
     loadSlowMode();
-    
-    // Update online count and slow mode timer
+
+    // Timer logic remains the same
     const interval = setInterval(() => {
-      setOnlineCount(chatStorage.getOnlineCount('global'));
       updateSlowModeTimer();
     }, 1000);
-    
+
     return () => {
       unsubscribe();
       clearInterval(interval);
@@ -99,7 +130,8 @@ export function GlobalChat({ isDarkMode }: { isDarkMode: boolean }) {
     return elapsed >= slowMode.interval;
   };
 
-  const handleSendMessage = (
+  // --- NEW: SEND MESSAGE TO FIREBASE ---
+  const handleSendMessage = async (
     messageText: string, 
     type: 'text' | 'image' | 'video' | 'poll' | 'gif', 
     mediaUrl?: string, 
@@ -107,79 +139,71 @@ export function GlobalChat({ isDarkMode }: { isDarkMode: boolean }) {
   ) => {
     if (!user || !canSendMessage()) return;
 
-    const message: ChatMessageType = {
-      id: `${Date.now()}_${Math.random()}`,
-      userId: user.id,
-      userName: user.fullName,
-      userType: user.userType,
-      message: messageText,
-      timestamp: Date.now(),
-      type,
-      mediaUrl,
-      pollData
-    };
+    try {
+      // Add a new document to the "global_chat" collection
+      await addDoc(collection(db, "global_chat"), {
+        userId: user.id,
+        userName: user.fullName,
+        userType: user.userType,
+        message: messageText,
+        createdAt: serverTimestamp(), // Uses server time to prevent issues
+        type,
+        mediaUrl: mediaUrl || null,
+        pollData: pollData || null
+      });
 
-    const updatedMessages = [...messages, message];
-    chatStorage.saveMessages('global', updatedMessages);
-    setMessages(updatedMessages);
-
-    // Update slow mode timer
-    if (slowMode.enabled) {
-      const newSlowMode = {
-        ...slowMode,
-        lastMessageTime: {
-          ...slowMode.lastMessageTime,
-          [user.id]: Date.now()
-        }
-      };
-      saveSlowMode(newSlowMode);
+      // Update slow mode locally
+      if (slowMode.enabled) {
+        const newSlowMode = {
+          ...slowMode,
+          lastMessageTime: {
+            ...slowMode.lastMessageTime,
+            [user.id]: Date.now()
+          }
+        };
+        saveSlowMode(newSlowMode);
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+      alert("Failed to send message. Check console for details.");
     }
   };
 
-  const handleVotePoll = (messageId: string, optionId: string) => {
+  // --- NEW: HANDLE VOTING WITH FIREBASE ---
+  const handleVotePoll = async (messageId: string, optionId: string) => {
     if (!user) return;
 
-    const updatedMessages = messages.map(msg => {
-      if (msg.id === messageId && msg.pollData) {
-        // Check if user already voted
-        if (msg.pollData.votedUsers.includes(user.id)) {
-          return msg;
-        }
+    const messageToUpdate = messages.find(m => m.id === messageId);
+    if (!messageToUpdate || !messageToUpdate.pollData) return;
 
-        // Update poll data
-        const updatedPollData = {
-          ...msg.pollData,
-          options: msg.pollData.options.map(opt =>
-            opt.id === optionId
-              ? { ...opt, votes: opt.votes + 1 }
-              : opt
-          ),
-          totalVotes: msg.pollData.totalVotes + 1,
-          votedUsers: [...msg.pollData.votedUsers, user.id]
-        };
+    if (messageToUpdate.pollData.votedUsers.includes(user.id)) {
+      return; // User already voted
+    }
 
-        return { ...msg, pollData: updatedPollData };
-      }
-      return msg;
-    });
+    // Logic to update the specific poll option
+    const newOptions = messageToUpdate.pollData.options.map(opt => 
+      opt.id === optionId ? { ...opt, votes: opt.votes + 1 } : opt
+    );
 
-    chatStorage.saveMessages('global', updatedMessages);
-    setMessages(updatedMessages);
+    try {
+      const msgRef = doc(db, "global_chat", messageId);
+      await updateDoc(msgRef, {
+        "pollData.options": newOptions,
+        "pollData.totalVotes": messageToUpdate.pollData.totalVotes + 1,
+        "pollData.votedUsers": arrayUnion(user.id) // Adds ID to array safely
+      });
+    } catch (error) {
+      console.error("Error voting:", error);
+    }
   };
 
   const toggleSlowMode = () => {
-    const newSettings = {
-      ...slowMode,
-      enabled: !slowMode.enabled
-    };
+    const newSettings = { ...slowMode, enabled: !slowMode.enabled };
     saveSlowMode(newSettings);
   };
 
   const updateSlowModeInterval = (interval: number) => {
-    const newSettings = {
-      ...slowMode,
-      interval
-    };
+    const newSettings = { ...slowMode, interval };
     saveSlowMode(newSettings);
   };
 
@@ -196,7 +220,7 @@ export function GlobalChat({ isDarkMode }: { isDarkMode: boolean }) {
               <h2 className="text-xl font-bold">Global Community</h2>
               <p className="text-sm text-gray-500 flex items-center gap-2">
                 <Users className="w-4 h-4" />
-                Connect with students and mentors worldwide
+                Global Chat
                 {slowMode.enabled && (
                   <span className="ml-2 px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 rounded-full text-xs flex items-center gap-1">
                     <Clock className="w-3 h-3" />
