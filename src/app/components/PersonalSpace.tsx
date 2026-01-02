@@ -18,6 +18,7 @@ import {
   Sparkles,
   Flame,
   BarChart3,
+  Loader2,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -33,6 +34,7 @@ import { IndustryTrends } from "./IndustryTrends";
 import { SkillGapAnalysis } from "./SkillGapAnalysis";
 import { DailyQuests } from "./DailyQuests";
 import { generateRoadmap } from "../utils/roadmapGenerator";
+import { generateCareerPathWithAI } from "../services/geminiService";
 
 interface Note {
   id: string;
@@ -110,6 +112,8 @@ export function PersonalSpace({
   const [skillLevel, setSkillLevel] = useState<
     "beginner" | "intermediate" | "advanced" | null
   >(null);
+  const [isGeneratingPath, setIsGeneratingPath] = useState(false);
+  const [aiRoadmap, setAiRoadmap] = useState<RoadmapData | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -118,6 +122,7 @@ export function PersonalSpace({
       loadCareerPath();
       loadCareerOnboarding();
       loadSkillAssessment();
+      loadAiRoadmap();
     }
   }, [user]);
 
@@ -621,11 +626,11 @@ export function PersonalSpace({
     };
   };
 
-  const handleOnboardingComplete = (data: OnboardingData) => {
+  const handleOnboardingComplete = async (data: OnboardingData) => {
     // Generate personalized career path
     const newCareerPath = generateCareerPath(data);
 
-    // Save everything
+    // Save onboarding data immediately
     localStorage.setItem(
       CAREER_ONBOARDING_KEY + user?.id,
       JSON.stringify(data),
@@ -642,6 +647,31 @@ export function PersonalSpace({
     // Show skill assessment if not completed yet
     if (!skillLevel) {
       setShowSkillAssessment(true);
+    }
+
+    // Generate AI-powered roadmap in background
+    setIsGeneratingPath(true);
+    try {
+      const aiGeneratedRoadmap = await generateCareerPathWithAI(data);
+      if (aiGeneratedRoadmap) {
+        setAiRoadmap(aiGeneratedRoadmap);
+        // Store AI roadmap for persistence
+        localStorage.setItem(
+          `unifiedcampus_ai_roadmap_${user?.id}`,
+          JSON.stringify(aiGeneratedRoadmap)
+        );
+      } else {
+        // Fallback to static roadmap generator
+        const fallbackRoadmap = generateRoadmap(data);
+        setAiRoadmap(fallbackRoadmap);
+      }
+    } catch (error) {
+      console.error('Failed to generate AI roadmap:', error);
+      // Use fallback
+      const fallbackRoadmap = generateRoadmap(data);
+      setAiRoadmap(fallbackRoadmap);
+    } finally {
+      setIsGeneratingPath(false);
     }
   };
 
@@ -961,11 +991,20 @@ export function PersonalSpace({
     );
   };
 
+  const loadAiRoadmap = () => {
+    const stored = localStorage.getItem(`unifiedcampus_ai_roadmap_${user?.id}`);
+    if (stored) {
+      try {
+        setAiRoadmap(JSON.parse(stored));
+      } catch (e) {
+        console.error('Failed to parse AI roadmap:', e);
+      }
+    }
+  };
+
   const renderCareerGuide = () => {
-    // Generate roadmap if we have onboarding data
-    const roadmapData = careerOnboarding
-      ? generateRoadmap(careerOnboarding)
-      : null;
+    // Use AI roadmap if available, otherwise fall back to static generator
+    const roadmapData = aiRoadmap || (careerOnboarding ? generateRoadmap(careerOnboarding) : null);
 
     return (
       <div className="space-y-6">
@@ -988,12 +1027,33 @@ export function PersonalSpace({
           </div>
         </div>
 
+        {/* Loading State for AI Generation */}
+        {isGeneratingPath && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className={`${isDarkMode ? "bg-gray-800" : "bg-white"} rounded-2xl shadow-sm p-8 text-center`}
+          >
+            <Loader2 className="w-12 h-12 mx-auto mb-4 text-purple-500 animate-spin" />
+            <h4 className="text-lg font-semibold mb-2">Generating Your Personalized Career Path...</h4>
+            <p className="text-sm text-gray-500">Our AI is analyzing your goals and interests to create the perfect roadmap for you.</p>
+          </motion.div>
+        )}
+
         {/* Career Roadmap */}
-        {roadmapData && (
+        {roadmapData && !isGeneratingPath && (
           <div>
-            <h3 className="text-2xl font-bold mb-4">
-              Your Personalized Career Roadmap
-            </h3>
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="text-2xl font-bold">
+                Your Personalized Career Roadmap
+              </h3>
+              {aiRoadmap && (
+                <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-semibold rounded-full flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" />
+                  AI Generated
+                </span>
+              )}
+            </div>
             <CareerRoadmap
               isDarkMode={isDarkMode}
               roadmapData={roadmapData}
