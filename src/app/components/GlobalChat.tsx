@@ -4,14 +4,16 @@ import { Users, Globe, Settings, Clock } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
+import { getSharedChatStorage } from "../utils/sharedChatStorage";
 import type { ChatMessage as ChatMessageType, PollData, SlowModeSettings } from "../types/chat";
 
-const GLOBAL_CHAT_KEY = 'unifiedcampus_global_chat';
 const GLOBAL_SLOWMODE_KEY = 'unifiedcampus_global_slowmode';
 
 export function GlobalChat({ isDarkMode }: { isDarkMode: boolean }) {
   const { user } = useAuth();
+  const chatStorage = getSharedChatStorage();
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
+  const [onlineCount, setOnlineCount] = useState(0);
   const [slowMode, setSlowMode] = useState<SlowModeSettings>({
     enabled: false,
     interval: 10,
@@ -24,13 +26,27 @@ export function GlobalChat({ isDarkMode }: { isDarkMode: boolean }) {
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
   useEffect(() => {
-    loadMessages();
+    // Load initial messages
+    const initialMessages = chatStorage.getMessages('global');
+    setMessages(initialMessages);
+    
+    // Subscribe to message updates (works across all browser tabs and users)
+    const unsubscribe = chatStorage.subscribe('global', (updatedMessages) => {
+      setMessages(updatedMessages);
+    });
+    
     loadSlowMode();
+    
+    // Update online count and slow mode timer
     const interval = setInterval(() => {
-      loadMessages();
+      setOnlineCount(chatStorage.getOnlineCount('global'));
       updateSlowModeTimer();
     }, 1000);
-    return () => clearInterval(interval);
+    
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -38,13 +54,6 @@ export function GlobalChat({ isDarkMode }: { isDarkMode: boolean }) {
       scrollToBottom();
     }
   }, [messages, shouldAutoScroll]);
-
-  const loadMessages = () => {
-    const stored = localStorage.getItem(GLOBAL_CHAT_KEY);
-    if (stored) {
-      setMessages(JSON.parse(stored));
-    }
-  };
 
   const loadSlowMode = () => {
     const stored = localStorage.getItem(GLOBAL_SLOWMODE_KEY);
@@ -111,7 +120,7 @@ export function GlobalChat({ isDarkMode }: { isDarkMode: boolean }) {
     };
 
     const updatedMessages = [...messages, message];
-    localStorage.setItem(GLOBAL_CHAT_KEY, JSON.stringify(updatedMessages));
+    chatStorage.saveMessages('global', updatedMessages);
     setMessages(updatedMessages);
 
     // Update slow mode timer
@@ -154,7 +163,7 @@ export function GlobalChat({ isDarkMode }: { isDarkMode: boolean }) {
       return msg;
     });
 
-    localStorage.setItem(GLOBAL_CHAT_KEY, JSON.stringify(updatedMessages));
+    chatStorage.saveMessages('global', updatedMessages);
     setMessages(updatedMessages);
   };
 

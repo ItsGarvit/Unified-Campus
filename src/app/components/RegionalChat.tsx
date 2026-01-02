@@ -4,14 +4,16 @@ import { Users, MapPin, Settings, Clock } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
+import { getSharedChatStorage } from "../utils/sharedChatStorage";
 import type { ChatMessage as ChatMessageType, PollData, SlowModeSettings } from "../types/chat";
 
-const REGIONAL_CHAT_KEY = 'unifiedcampus_regional_chat';
 const REGIONAL_SLOWMODE_KEY = 'unifiedcampus_regional_slowmode';
 
 export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
   const { user } = useAuth();
+  const chatStorage = getSharedChatStorage();
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
+  const [onlineCount, setOnlineCount] = useState(0);
   const [slowMode, setSlowMode] = useState<SlowModeSettings>({
     enabled: false,
     interval: 10,
@@ -24,30 +26,38 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
   useEffect(() => {
-    loadMessages();
+    if (!user?.region) return;
+
+    // Load initial messages for this region
+    const initialMessages = chatStorage.getMessages('regional', user.region);
+    setMessages(initialMessages);
+    
+    // Subscribe to message updates for this region (works across all users in this region)
+    const unsubscribe = chatStorage.subscribe('regional', (updatedMessages) => {
+      setMessages(updatedMessages);
+    }, user.region);
+    
     loadSlowMode();
+    
+    // Update online count and slow mode timer
     const interval = setInterval(() => {
-      loadMessages();
+      if (user?.region) {
+        setOnlineCount(chatStorage.getOnlineCount('regional', user.region));
+      }
       updateSlowModeTimer();
     }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+    
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, [user?.region]);
 
   useEffect(() => {
     if (shouldAutoScroll) {
       scrollToBottom();
     }
   }, [messages, shouldAutoScroll]);
-
-  const loadMessages = () => {
-    const stored = localStorage.getItem(REGIONAL_CHAT_KEY);
-    if (stored) {
-      const allMessages: ChatMessageType[] = JSON.parse(stored);
-      // Filter messages by user's region
-      const filtered = allMessages.filter(msg => msg.region === user?.region);
-      setMessages(filtered);
-    }
-  };
 
   const loadSlowMode = () => {
     const stored = localStorage.getItem(REGIONAL_SLOWMODE_KEY);
@@ -114,13 +124,8 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
       region: user.region
     };
 
-    const stored = localStorage.getItem(REGIONAL_CHAT_KEY);
-    const allMessages: ChatMessageType[] = stored ? JSON.parse(stored) : [];
-    const updatedMessages = [...allMessages, message];
+    chatStorage.addMessage('regional', message, user.region);
     
-    localStorage.setItem(REGIONAL_CHAT_KEY, JSON.stringify(updatedMessages));
-    loadMessages();
-
     // Update slow mode timer
     if (slowMode.enabled) {
       const newSlowMode = {
@@ -135,13 +140,10 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
   };
 
   const handleVotePoll = (messageId: string, optionId: string) => {
-    if (!user) return;
+    if (!user || !user.region) return;
 
-    const stored = localStorage.getItem(REGIONAL_CHAT_KEY);
-    const allMessages: ChatMessageType[] = stored ? JSON.parse(stored) : [];
-
-    const updatedMessages = allMessages.map(msg => {
-      if (msg.id === messageId && msg.pollData) {
+    chatStorage.updateMessage('regional', messageId, (msg) => {
+      if (msg.pollData) {
         // Check if user already voted
         if (msg.pollData.votedUsers.includes(user.id)) {
           return msg;
@@ -162,10 +164,7 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
         return { ...msg, pollData: updatedPollData };
       }
       return msg;
-    });
-
-    localStorage.setItem(REGIONAL_CHAT_KEY, JSON.stringify(updatedMessages));
-    loadMessages();
+    }, user.region);
   };
 
   const toggleSlowMode = () => {
