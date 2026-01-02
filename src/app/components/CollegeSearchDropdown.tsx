@@ -72,19 +72,23 @@ export function CollegeSearchDropdown({
       clearTimeout(aiSearchTimeout.current);
     }
 
-    // Debounced AI search if no local results and query is long enough
-    if (searchQuery.length >= 3 && filteredColleges.length === 0 && isGeminiConfigured()) {
+    // Debounced AI search if query is long enough
+    if (searchQuery.length >= 3 && isGeminiConfigured()) {
       aiSearchTimeout.current = setTimeout(async () => {
         setIsAiSearching(true);
         try {
           const suggestions = await searchCollegesWithAI(searchQuery);
-          setAiSuggestions(suggestions);
+          // Filter out suggestions that are already in filteredColleges to avoid duplicates
+          const uniqueSuggestions = suggestions.filter(
+            s => !filteredColleges.some(fc => fc.toLowerCase() === s.toLowerCase())
+          );
+          setAiSuggestions(uniqueSuggestions);
         } catch (error) {
           console.error("AI search failed:", error);
         } finally {
           setIsAiSearching(false);
         }
-      }, 800);
+      }, 1000); // Slightly longer debounce for global search
     }
 
     return () => {
@@ -285,57 +289,67 @@ export function CollegeSearchDropdown({
               >
                 {hasColleges ? (
                   <>
-                    {filteredColleges.length > 0 ? (
-                      filteredColleges.map((college, index) => (
-                        <button
-                          key={college}
-                          type="button"
-                          onClick={() => handleSelectCollege(college)}
-                          className={`w-full px-4 py-3 text-left text-sm flex items-center justify-between transition-colors ${
-                            highlightedIndex === index
-                              ? isDarkMode
-                                ? "bg-blue-600 text-white"
-                                : "bg-blue-50 text-blue-700"
-                              : isDarkMode
-                              ? "hover:bg-gray-700"
-                              : "hover:bg-gray-50"
-                          }`}
-                        >
-                          <span className="truncate pr-2">{college}</span>
-                          {value === college && (
-                            <Check className="w-4 h-4 flex-shrink-0 text-green-500" />
-                          )}
-                        </button>
-                      ))
-                    ) : (
-                      <div className={`px-4 py-3 text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                        {isAiSearching ? (
-                          <div className="flex items-center gap-2">
-                            <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                            <span>Searching globally for "{searchQuery}"...</span>
-                          </div>
-                        ) : (
-                          <span>No colleges found matching "{searchQuery}"</span>
-                        )}
+                    {/* Local Results Section */}
+                    {filteredColleges.length > 0 && (
+                      <div className="py-1">
+                        <div className={`px-4 py-1 text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                          Local Colleges ({state || "Global"})
+                        </div>
+                        {filteredColleges.map((college, index) => (
+                          <button
+                            key={college}
+                            type="button"
+                            onClick={() => handleSelectCollege(college)}
+                            className={`w-full px-4 py-3 text-left text-sm flex items-center justify-between transition-colors ${
+                              highlightedIndex === index
+                                ? isDarkMode
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-blue-50 text-blue-700"
+                                : isDarkMode
+                                ? "hover:bg-gray-700"
+                                : "hover:bg-gray-50"
+                            }`}
+                          >
+                            <span className="truncate pr-2">{college}</span>
+                            {value === college && (
+                              <Check className="w-4 h-4 flex-shrink-0 text-green-500" />
+                            )}
+                          </button>
+                        ))}
                       </div>
                     )}
 
-                    {/* AI Suggestions */}
-                    {!isAiSearching && aiSuggestions.length > 0 && (
-                      <div className={`p-2 bg-purple-50/50 dark:bg-purple-900/10 border-y ${isDarkMode ? "border-purple-900/30" : "border-purple-100"}`}>
-                        <div className="flex items-center gap-2 px-2 py-1 mb-1">
-                          <Sparkles className="w-3 h-3 text-purple-500" />
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Global AI Suggestions</span>
+                    {filteredColleges.length === 0 && !isAiSearching && aiSuggestions.length === 0 && (
+                      <div className={`px-4 py-3 text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                        No local colleges found matching "{searchQuery}"
+                      </div>
+                    )}
+
+                    {/* Global AI Suggestions Section */}
+                    {isAiSearching && (
+                      <div className="p-3 border-t border-purple-100 dark:border-purple-900/30">
+                        <div className="flex items-center gap-2 text-sm text-purple-600 dark:text-purple-400">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Searching globally using AI...</span>
                         </div>
-                        {aiSuggestions.map((college, index) => (
+                      </div>
+                    )}
+
+                    {!isAiSearching && aiSuggestions.length > 0 && (
+                      <div className={`p-1 bg-purple-50/30 dark:bg-purple-900/10 border-t ${isDarkMode ? "border-purple-900/30" : "border-purple-100"}`}>
+                        <div className="flex items-center gap-2 px-3 py-2">
+                          <Sparkles className="w-3 h-3 text-purple-500" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">AI Global Results</span>
+                        </div>
+                        {aiSuggestions.map((college) => (
                           <button
                             key={`ai-${college}`}
                             type="button"
                             onClick={() => handleSelectCollege(college)}
-                            className={`w-full px-3 py-2 rounded-lg text-left text-sm flex items-center justify-between transition-colors ${
+                            className={`w-full px-4 py-2 rounded-lg text-left text-sm flex items-center justify-between transition-colors ${
                               isDarkMode
-                                ? "hover:bg-purple-900/30 text-gray-200"
-                                : "hover:bg-purple-50 text-purple-900"
+                                ? "hover:bg-purple-900/50 text-gray-200"
+                                : "hover:bg-purple-100/50 text-purple-900"
                             }`}
                           >
                             <span className="truncate pr-2">{college}</span>

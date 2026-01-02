@@ -207,6 +207,7 @@ export const collegesByState: Record<string, string[]> = {
     "Medicaps University, Indore",
     "Prestige Institute of Engineering, Indore",
     "Oriental Institute of Science and Technology, Bhopal",
+    "Acropolis Institute of Technology and Research, Indore",
   ],
   "Kerala": [
     "Indian Institute of Technology Palakkad (IIT Palakkad)",
