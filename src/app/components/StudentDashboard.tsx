@@ -31,6 +31,7 @@ import { RegionalChat } from "./RegionalChat";
 import { CollegeChat } from "./CollegeChat";
 import { PersonalSpace } from "./PersonalSpace";
 import { CollegeVerificationModal } from "./CollegeVerificationModal";
+import { ProfileDropdown } from "./ProfileDropdown";
 
 export function StudentDashboard() {
   const { user, logout, updateUserId } = useAuth();
@@ -260,9 +261,7 @@ export function StudentDashboard() {
               {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
             
-            <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-              {user.fullName.charAt(0)}
-            </div>
+            <ProfileDropdown isDarkMode={isDarkMode} />
           </div>
         </header>
 
@@ -529,20 +528,6 @@ export function StudentDashboard() {
                   </motion.div>
                 </div>
               </div>
-
-              {/* Logout Button */}
-              <motion.button
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.8 }}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={logout}
-                className="mt-6 w-full flex items-center justify-center gap-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors"
-              >
-                <LogOut className="w-5 h-5" />
-                Logout
-              </motion.button>
             </div>
           )}
         </div>

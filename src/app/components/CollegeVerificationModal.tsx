@@ -117,7 +117,7 @@ export function CollegeVerificationModal({
                 Select Your College
               </label>
               <CollegeSearchDropdown
-                state={user?.state || ""}
+                showAllColleges={true}
                 value={selectedCollege}
                 onChange={setSelectedCollege}
                 isDarkMode={isDarkMode}

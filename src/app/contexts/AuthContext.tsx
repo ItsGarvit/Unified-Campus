@@ -4,9 +4,10 @@ import {
   signInWithEmailAndPassword, 
   signOut, 
   onAuthStateChanged,
+  deleteUser,
   User as FirebaseUser
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import { auth, db, USE_DEMO_MODE } from '../config/firebase';
 
 export interface User {
@@ -40,6 +41,7 @@ interface AuthContextType {
   logout: () => void;
   updateUserId: (newId: string) => Promise<boolean>;
   updateCollege: (college: string) => Promise<boolean>;
+  deleteAccount: () => Promise<boolean>;
   isAuthenticated: boolean;
   loading: boolean;
 }
@@ -447,8 +449,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const deleteAccount = async (): Promise<boolean> => {
+    try {
+      if (USE_DEMO_MODE) {
+        // Demo mode delete account
+        if (!user) {
+          throw new Error('User not found');
+        }
+
+        // Remove user from localStorage
+        const users = getDemoUsers();
+        const updatedUsers = users.filter(u => u.email !== user.email);
+        localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(updatedUsers));
+
+        // Clear current user
+        setDemoCurrentUser(null);
+        setUser(null);
+        setIsAuthenticated(false);
+
+        return true;
+      } else {
+        // Firebase delete account
+        if (!auth || !db) {
+          throw new Error('Firebase is not configured.');
+        }
+
+        const currentUser = auth.currentUser;
+        if (!currentUser || !user) {
+          throw new Error('User not found');
+        }
+
+        // Delete user document from Firestore
+        await deleteDoc(doc(db, 'users', user.id));
+
+        // Delete Firebase auth user
+        await deleteUser(currentUser);
+
+        // Update local state
+        setUser(null);
+        setIsAuthenticated(false);
+
+        return true;
+      }
+    } catch (error: any) {
+      console.error('Delete account error:', error);
+      throw error;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout, updateUserId, updateCollege, isAuthenticated, loading }}>
+    <AuthContext.Provider value={{ user, login, signup, logout, updateUserId, updateCollege, deleteAccount, isAuthenticated, loading }}>
       {!loading && children}
     </AuthContext.Provider>
   );
@@ -467,6 +517,7 @@ export function useAuth() {
         logout: () => {},
         updateUserId: async () => false,
         updateCollege: async () => false,
+        deleteAccount: async () => false,
         isAuthenticated: false,
         loading: true
       };

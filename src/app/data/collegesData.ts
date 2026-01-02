@@ -404,9 +404,33 @@ export function searchColleges(state: string, query: string): string[] {
   );
 }
 
-/**
- * Get all available states
- */
 export function getAvailableStates(): string[] {
   return Object.keys(collegesByState).sort();
+}
+
+/**
+ * Get all colleges from all states
+ */
+export function getAllColleges(): string[] {
+  const allColleges: string[] = [];
+  for (const state of Object.keys(collegesByState)) {
+    allColleges.push(...collegesByState[state]);
+  }
+  return allColleges.sort();
+}
+
+/**
+ * Search across all colleges from all states
+ */
+export function searchAllColleges(query: string): string[] {
+  const colleges = getAllColleges();
+  
+  if (!query.trim()) {
+    return colleges;
+  }
+  
+  const lowerQuery = query.toLowerCase();
+  return colleges.filter(college => 
+    college.toLowerCase().includes(lowerQuery)
+  );
 }

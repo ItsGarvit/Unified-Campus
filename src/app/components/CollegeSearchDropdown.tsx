@@ -1,22 +1,24 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Building2, Search, ChevronDown, Check, Plus } from "lucide-react";
-import { searchColleges, getCollegesByState } from "../data/collegesData";
+import { searchColleges, getCollegesByState, getAllColleges, searchAllColleges } from "../data/collegesData";
 
 interface CollegeSearchDropdownProps {
-  state: string;
+  state?: string;
   value: string;
   onChange: (college: string) => void;
   disabled?: boolean;
   isDarkMode?: boolean;
+  showAllColleges?: boolean;
 }
 
 export function CollegeSearchDropdown({
-  state,
+  state = "",
   value,
   onChange,
   disabled = false,
   isDarkMode = false,
+  showAllColleges = false,
 }: CollegeSearchDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -29,9 +31,11 @@ export function CollegeSearchDropdown({
   const listRef = useRef<HTMLDivElement>(null);
 
   // Get filtered colleges based on search
-  const filteredColleges = searchColleges(state, searchQuery);
-  const allColleges = getCollegesByState(state);
-  const hasColleges = allColleges.length > 0;
+  const filteredColleges = showAllColleges 
+    ? searchAllColleges(searchQuery) 
+    : searchColleges(state, searchQuery);
+  const collegeList = showAllColleges ? getAllColleges() : getCollegesByState(state);
+  const hasColleges = collegeList.length > 0;
 
   // Close dropdown when clicking outside
   useEffect(() => {
