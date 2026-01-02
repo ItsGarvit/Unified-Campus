@@ -6,8 +6,9 @@ interface GetStartedModalProps {
   isOpen: boolean;
   onClose: () => void;
   onNavigateToLogin: (role: "student" | "mentor") => void;
-  onNavigateToSignup?: (role: "student" | "mentor") => void;
+  onNavigateToSignup: (role: "student" | "mentor") => void;
   onLocationCaptured?: (location: { latitude: number; longitude: number }) => void;
+  mode: "login" | "signup";
 }
 
 export function GetStartedModal({
@@ -16,6 +17,7 @@ export function GetStartedModal({
   onNavigateToLogin,
   onNavigateToSignup,
   onLocationCaptured,
+  mode,
 }: GetStartedModalProps) {
   const [selectedRole, setSelectedRole] = useState<"student" | "mentor" | null>(null);
   const [showLocationPrompt, setShowLocationPrompt] = useState(false);
@@ -41,7 +43,11 @@ export function GetStartedModal({
           }
           
           if (selectedRole) {
-            onNavigateToLogin(selectedRole);
+            if (mode === "login") {
+              onNavigateToLogin(selectedRole);
+            } else {
+              onNavigateToSignup(selectedRole);
+            }
           }
           onClose();
           setShowLocationPrompt(false);
@@ -52,7 +58,11 @@ export function GetStartedModal({
           // This is expected behavior in many environments, so we don't log errors
           
           if (selectedRole) {
-            onNavigateToLogin(selectedRole);
+            if (mode === "login") {
+              onNavigateToLogin(selectedRole);
+            } else {
+              onNavigateToSignup(selectedRole);
+            }
           }
           onClose();
           setShowLocationPrompt(false);
@@ -79,7 +89,11 @@ export function GetStartedModal({
   const handleSkipLocation = () => {
     // Skip location and navigate directly to login
     if (selectedRole) {
-      onNavigateToLogin(selectedRole);
+      if (mode === "login") {
+        onNavigateToLogin(selectedRole);
+      } else {
+        onNavigateToSignup(selectedRole);
+      }
     }
     onClose();
     setShowLocationPrompt(false);
@@ -120,10 +134,12 @@ export function GetStartedModal({
                 <>
                   {/* Role Selection */}
                   <h2 className="text-center mb-4 font-bold text-gray-900 dark:text-gray-100">
-                    Get Started
+                    {mode === "login" ? "Login" : "Sign Up"}
                   </h2>
                   <p className="text-center mb-12 text-gray-700 dark:text-gray-300">
-                    Choose how you want to join UnifiedCampus
+                    {mode === "login" 
+                      ? "Choose your role to login to UnifiedCampus" 
+                      : "Choose how you want to join UnifiedCampus"}
                   </p>
 
                   <div className="grid md:grid-cols-2 gap-6">

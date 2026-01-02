@@ -17,6 +17,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 function AppContent() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"login" | "signup">("signup");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [currentView, setCurrentView] = useState<
     "landing" | "student-login" | "mentor-login" | "student-signup" | "mentor-signup"
@@ -44,6 +45,10 @@ function AppContent() {
   };
 
   const handleNavigateToLogin = (role: "student" | "mentor") => {
+    setCurrentView(role === "student" ? "student-login" : "mentor-login");
+  };
+
+  const handleNavigateToSignup = (role: "student" | "mentor") => {
     setCurrentView(role === "student" ? "student-signup" : "mentor-signup");
   };
 
@@ -112,7 +117,14 @@ function AppContent() {
       }}
     >
       <Header
-        onGetStarted={() => setIsModalOpen(true)}
+        onLogin={() => {
+          setModalMode("login");
+          setIsModalOpen(true);
+        }}
+        onSignup={() => {
+          setModalMode("signup");
+          setIsModalOpen(true);
+        }}
         theme={theme}
         toggleTheme={toggleTheme}
       />
@@ -131,7 +143,9 @@ function AppContent() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onNavigateToLogin={handleNavigateToLogin}
+        onNavigateToSignup={handleNavigateToSignup}
         onLocationCaptured={setUserLocation}
+        mode={modalMode}
       />
     </div>
   );

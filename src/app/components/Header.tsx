@@ -3,12 +3,13 @@ import { useState } from "react";
 import { motion } from "motion/react";
 
 interface HeaderProps {
-  onGetStarted: () => void;
+  onLogin: () => void;
+  onSignup: () => void;
   theme: "light" | "dark";
   toggleTheme: () => void;
 }
 
-export function Header({ onGetStarted, theme, toggleTheme }: HeaderProps) {
+export function Header({ onLogin, onSignup, theme, toggleTheme }: HeaderProps) {
   const [activeLink, setActiveLink] = useState("");
 
   const scrollToSection = (id: string) => {
@@ -91,15 +92,23 @@ export function Header({ onGetStarted, theme, toggleTheme }: HeaderProps) {
             </ul>
           </nav>
 
-          {/* Login/Signup & Theme Toggle */}
+          {/* Login & Signup Buttons + Theme Toggle */}
           <div className="flex items-center gap-3">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={onGetStarted}
+              onClick={onLogin}
+              className="px-6 py-3 rounded-full font-semibold border-2 border-purple-500 text-purple-600 dark:text-purple-400 dark:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+            >
+              Login
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={onSignup}
               className="bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 px-6 py-3 rounded-full font-semibold shadow-lg text-white hover:shadow-xl transition-shadow"
             >
-              Login / Signup
+              Sign Up
             </motion.button>
             
             <motion.button
