@@ -6,7 +6,21 @@ import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
 import type { ChatMessage as ChatMessageType, PollData, SlowModeSettings } from "../types/chat";
 
-const COLLEGE_CHAT_KEY = 'unifiedcampus_college_chat';
+// Firebase imports
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  where,
+  orderBy, 
+  onSnapshot, 
+  serverTimestamp,
+  updateDoc,
+  doc,
+  arrayUnion
+} from "firebase/firestore";
+import { db } from "../config/firebase";
+
 const COLLEGE_SLOWMODE_KEY = 'unifiedcampus_college_slowmode';
 
 export function CollegeChat({ isDarkMode }: { isDarkMode: boolean }) {
@@ -23,31 +37,55 @@ export function CollegeChat({ isDarkMode }: { isDarkMode: boolean }) {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
+  // Firebase real-time listener for college messages
   useEffect(() => {
-    loadMessages();
+    if (!user?.college) return;
+
+    // Query messages for this specific college
+    const q = query(
+      collection(db, "college_chat"), 
+      where("college", "==", user.college),
+      orderBy("createdAt", "asc")
+    );
+
+    // Listen for real-time updates
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const liveMessages = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          userId: data.userId,
+          userName: data.userName,
+          userType: data.userType,
+          message: data.message,
+          timestamp: data.createdAt?.toMillis() || Date.now(),
+          type: data.type,
+          mediaUrl: data.mediaUrl,
+          pollData: data.pollData,
+          college: data.college,
+        } as ChatMessageType;
+      });
+      setMessages(liveMessages);
+    });
+
     loadSlowMode();
+
+    // Timer for slow mode
     const interval = setInterval(() => {
-      loadMessages();
       updateSlowModeTimer();
     }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, [user?.college]);
 
   useEffect(() => {
     if (shouldAutoScroll) {
       scrollToBottom();
     }
   }, [messages, shouldAutoScroll]);
-
-  const loadMessages = () => {
-    const stored = localStorage.getItem(COLLEGE_CHAT_KEY);
-    if (stored) {
-      const allMessages: ChatMessageType[] = JSON.parse(stored);
-      // Filter messages by user's college
-      const filtered = allMessages.filter(msg => msg.college === user?.college);
-      setMessages(filtered);
-    }
-  };
 
   const loadSlowMode = () => {
     const stored = localStorage.getItem(COLLEGE_SLOWMODE_KEY);
@@ -93,7 +131,8 @@ export function CollegeChat({ isDarkMode }: { isDarkMode: boolean }) {
     return elapsed >= slowMode.interval;
   };
 
-  const handleSendMessage = (
+  // Send message to Firebase
+  const handleSendMessage = async (
     messageText: string, 
     type: 'text' | 'image' | 'video' | 'poll' | 'gif', 
     mediaUrl?: string, 
@@ -101,71 +140,62 @@ export function CollegeChat({ isDarkMode }: { isDarkMode: boolean }) {
   ) => {
     if (!user || !user.college || !canSendMessage()) return;
 
-    const message: ChatMessageType = {
-      id: `${Date.now()}_${Math.random()}`,
-      userId: user.id,
-      userName: user.fullName,
-      userType: user.userType,
-      message: messageText,
-      timestamp: Date.now(),
-      type,
-      mediaUrl,
-      pollData,
-      college: user.college
-    };
+    try {
+      // Add document to college_chat collection
+      await addDoc(collection(db, "college_chat"), {
+        userId: user.id,
+        userName: user.fullName,
+        userType: user.userType,
+        message: messageText,
+        college: user.college, // Filter key for college messages
+        createdAt: serverTimestamp(),
+        type,
+        mediaUrl: mediaUrl || null,
+        pollData: pollData || null
+      });
 
-    const stored = localStorage.getItem(COLLEGE_CHAT_KEY);
-    const allMessages: ChatMessageType[] = stored ? JSON.parse(stored) : [];
-    const updatedMessages = [...allMessages, message];
-    
-    localStorage.setItem(COLLEGE_CHAT_KEY, JSON.stringify(updatedMessages));
-    loadMessages();
-
-    // Update slow mode timer
-    if (slowMode.enabled) {
-      const newSlowMode = {
-        ...slowMode,
-        lastMessageTime: {
-          ...slowMode.lastMessageTime,
-          [user.id]: Date.now()
-        }
-      };
-      saveSlowMode(newSlowMode);
+      // Update slow mode locally
+      if (slowMode.enabled) {
+        const newSlowMode = {
+          ...slowMode,
+          lastMessageTime: {
+            ...slowMode.lastMessageTime,
+            [user.id]: Date.now()
+          }
+        };
+        saveSlowMode(newSlowMode);
+      }
+    } catch (error) {
+      console.error("Error sending college message:", error);
+      alert("Failed to send message. Check console for details.");
     }
   };
 
-  const handleVotePoll = (messageId: string, optionId: string) => {
+  // Handle poll voting with Firebase
+  const handleVotePoll = async (messageId: string, optionId: string) => {
     if (!user) return;
 
-    const stored = localStorage.getItem(COLLEGE_CHAT_KEY);
-    const allMessages: ChatMessageType[] = stored ? JSON.parse(stored) : [];
+    const messageToUpdate = messages.find(m => m.id === messageId);
+    if (!messageToUpdate || !messageToUpdate.pollData) return;
 
-    const updatedMessages = allMessages.map(msg => {
-      if (msg.id === messageId && msg.pollData) {
-        // Check if user already voted
-        if (msg.pollData.votedUsers.includes(user.id)) {
-          return msg;
-        }
+    if (messageToUpdate.pollData.votedUsers.includes(user.id)) {
+      return; // User already voted
+    }
 
-        // Update poll data
-        const updatedPollData = {
-          ...msg.pollData,
-          options: msg.pollData.options.map(opt =>
-            opt.id === optionId
-              ? { ...opt, votes: opt.votes + 1 }
-              : opt
-          ),
-          totalVotes: msg.pollData.totalVotes + 1,
-          votedUsers: [...msg.pollData.votedUsers, user.id]
-        };
+    const newOptions = messageToUpdate.pollData.options.map(opt =>
+      opt.id === optionId ? { ...opt, votes: opt.votes + 1 } : opt
+    );
 
-        return { ...msg, pollData: updatedPollData };
-      }
-      return msg;
-    });
-
-    localStorage.setItem(COLLEGE_CHAT_KEY, JSON.stringify(updatedMessages));
-    loadMessages();
+    try {
+      const msgRef = doc(db, "college_chat", messageId);
+      await updateDoc(msgRef, {
+        "pollData.options": newOptions,
+        "pollData.totalVotes": messageToUpdate.pollData.totalVotes + 1,
+        "pollData.votedUsers": arrayUnion(user.id)
+      });
+    } catch (error) {
+      console.error("Error voting:", error);
+    }
   };
 
   const toggleSlowMode = () => {

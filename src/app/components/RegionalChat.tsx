@@ -4,20 +4,37 @@ import { Users, MapPin, Settings, Clock } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
-import { getSharedChatStorage } from "../utils/sharedChatStorage";
-import type { ChatMessage as ChatMessageType, PollData, SlowModeSettings } from "../types/chat";
+import type {
+  ChatMessage as ChatMessageType,
+  PollData,
+  SlowModeSettings,
+} from "../types/chat";
 
-const REGIONAL_SLOWMODE_KEY = 'unifiedcampus_regional_slowmode';
+// Firebase imports
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  serverTimestamp,
+  updateDoc,
+  doc,
+  arrayUnion,
+} from "firebase/firestore";
+import { db } from "../config/firebase";
+
+const REGIONAL_SLOWMODE_KEY = "unifiedcampus_regional_slowmode";
 
 export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
   const { user } = useAuth();
-  const chatStorage = getSharedChatStorage();
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
-  const [onlineCount, setOnlineCount] = useState(0);
+  const [onlineCount, setOnlineCount] = useState(1);
   const [slowMode, setSlowMode] = useState<SlowModeSettings>({
     enabled: false,
     interval: 10,
-    lastMessageTime: {}
+    lastMessageTime: {},
   });
   const [slowModeRemaining, setSlowModeRemaining] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
@@ -25,33 +42,51 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
+  // Firebase real-time listener for regional messages
   useEffect(() => {
-    if (!user?.region) return;
+    // Use state field for regional filtering (fallback to region if state not available)
+    const userRegion = user?.state || user?.region;
+    if (!userRegion) return;
 
-    // Load initial messages for this region
-    const initialMessages = chatStorage.getMessages('regional', user.region);
-    setMessages(initialMessages);
-    
-    // Subscribe to message updates for this region (works across all users in this region)
-    const unsubscribe = chatStorage.subscribe('regional', (updatedMessages) => {
-      setMessages(updatedMessages);
-    }, user.region);
-    
+    // Query messages for this specific region/state
+    const q = query(
+      collection(db, "regional_chat"),
+      where("state", "==", userRegion),
+      orderBy("createdAt", "asc")
+    );
+
+    // Listen for real-time updates
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const liveMessages = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          userId: data.userId,
+          userName: data.userName,
+          userType: data.userType,
+          message: data.message,
+          timestamp: data.createdAt?.toMillis() || Date.now(),
+          type: data.type,
+          mediaUrl: data.mediaUrl,
+          pollData: data.pollData,
+          region: data.state,
+        } as ChatMessageType;
+      });
+      setMessages(liveMessages);
+    });
+
     loadSlowMode();
-    
-    // Update online count and slow mode timer
+
+    // Timer for slow mode
     const interval = setInterval(() => {
-      if (user?.region) {
-        setOnlineCount(chatStorage.getOnlineCount('regional', user.region));
-      }
       updateSlowModeTimer();
     }, 1000);
-    
+
     return () => {
       unsubscribe();
       clearInterval(interval);
     };
-  }, [user?.region]);
+  }, [user?.state, user?.region]);
 
   useEffect(() => {
     if (shouldAutoScroll) {
@@ -89,10 +124,11 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
 
   const handleScroll = () => {
     if (!messagesContainerRef.current) return;
-    
-    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+
+    const { scrollTop, scrollHeight, clientHeight } =
+      messagesContainerRef.current;
     const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-    
+
     setShouldAutoScroll(isNearBottom);
   };
 
@@ -103,74 +139,78 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
     return elapsed >= slowMode.interval;
   };
 
-  const handleSendMessage = (
-    messageText: string, 
-    type: 'text' | 'image' | 'video' | 'poll' | 'gif', 
-    mediaUrl?: string, 
+  // Send message to Firebase
+  const handleSendMessage = async (
+    messageText: string,
+    type: "text" | "image" | "video" | "poll" | "gif",
+    mediaUrl?: string,
     pollData?: PollData
   ) => {
-    if (!user || !user.region || !canSendMessage()) return;
+    const userRegion = user?.state || user?.region;
+    if (!user || !userRegion || !canSendMessage()) return;
 
-    const message: ChatMessageType = {
-      id: `${Date.now()}_${Math.random()}`,
-      userId: user.id,
-      userName: user.fullName,
-      userType: user.userType,
-      message: messageText,
-      timestamp: Date.now(),
-      type,
-      mediaUrl,
-      pollData,
-      region: user.region
-    };
+    try {
+      // Add document to regional_chat collection
+      await addDoc(collection(db, "regional_chat"), {
+        userId: user.id,
+        userName: user.fullName,
+        userType: user.userType,
+        message: messageText,
+        state: userRegion, // Filter key for regional messages
+        createdAt: serverTimestamp(),
+        type,
+        mediaUrl: mediaUrl || null,
+        pollData: pollData || null,
+      });
 
-    chatStorage.addMessage('regional', message, user.region);
-    
-    // Update slow mode timer
-    if (slowMode.enabled) {
-      const newSlowMode = {
-        ...slowMode,
-        lastMessageTime: {
-          ...slowMode.lastMessageTime,
-          [user.id]: Date.now()
-        }
-      };
-      saveSlowMode(newSlowMode);
+      // Update slow mode locally
+      if (slowMode.enabled) {
+        const newSlowMode = {
+          ...slowMode,
+          lastMessageTime: {
+            ...slowMode.lastMessageTime,
+            [user.id]: Date.now(),
+          },
+        };
+        saveSlowMode(newSlowMode);
+      }
+    } catch (error) {
+      console.error("Error sending regional message:", error);
+      alert("Failed to send message. Check console for details.");
     }
   };
 
-  const handleVotePoll = (messageId: string, optionId: string) => {
-    if (!user || !user.region) return;
+  // Handle poll voting with Firebase
+  const handleVotePoll = async (messageId: string, optionId: string) => {
+    if (!user) return;
 
-    chatStorage.updateMessage('regional', messageId, (msg) => {
-      if (msg.pollData) {
-        // Check if user already voted
-        if (msg.pollData.votedUsers.includes(user.id)) {
-          return msg;
-        }
+    const messageToUpdate = messages.find((m) => m.id === messageId);
+    if (!messageToUpdate || !messageToUpdate.pollData) return;
 
-        // Update poll data
-        const updatedPollData = {
-          ...msg.pollData,
-          options: msg.pollData.options.map(opt =>
-            opt.id === optionId
-              ? { ...opt, votes: opt.votes + 1 }
-              : opt
-          ),
-          totalVotes: msg.pollData.totalVotes + 1,
-          votedUsers: [...msg.pollData.votedUsers, user.id]
-        };
+    if (messageToUpdate.pollData.votedUsers.includes(user.id)) {
+      return; // User already voted
+    }
 
-        return { ...msg, pollData: updatedPollData };
-      }
-      return msg;
-    }, user.region);
+    const newOptions = messageToUpdate.pollData.options.map((opt) =>
+      opt.id === optionId ? { ...opt, votes: opt.votes + 1 } : opt
+    );
+
+    try {
+      const msgRef = doc(db, "regional_chat", messageId);
+      await updateDoc(msgRef, {
+        "pollData.options": newOptions,
+        "pollData.totalVotes": messageToUpdate.pollData.totalVotes + 1,
+        "pollData.votedUsers": arrayUnion(user.id),
+      });
+    } catch (error) {
+      console.error("Error voting:", error);
+    }
   };
 
   const toggleSlowMode = () => {
     const newSettings = {
       ...slowMode,
-      enabled: !slowMode.enabled
+      enabled: !slowMode.enabled,
     };
     saveSlowMode(newSettings);
   };
@@ -178,15 +218,23 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
   const updateSlowModeInterval = (interval: number) => {
     const newSettings = {
       ...slowMode,
-      interval
+      interval,
     };
     saveSlowMode(newSettings);
   };
 
+  const userRegion = user?.state || user?.region;
+
   return (
     <div className="h-full flex flex-col">
       {/* Header - Fixed */}
-      <div className={`flex-shrink-0 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b p-6`}>
+      <div
+        className={`flex-shrink-0 ${
+          isDarkMode
+            ? "bg-gray-800 border-gray-700"
+            : "bg-white border-gray-200"
+        } border-b p-6`}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-teal-500 rounded-full flex items-center justify-center">
@@ -196,7 +244,7 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
               <h2 className="text-xl font-bold">Regional Community</h2>
               <p className="text-sm text-gray-500 flex items-center gap-2">
                 <Users className="w-4 h-4" />
-                Connect with students in {user?.region || 'your region'}
+                Connect with students in {userRegion || "your region"}
                 {slowMode.enabled && (
                   <span className="ml-2 px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 rounded-full text-xs flex items-center gap-1">
                     <Clock className="w-3 h-3" />
@@ -209,7 +257,7 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
           <button
             onClick={() => setShowSettings(!showSettings)}
             className={`p-2 rounded-lg ${
-              isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+              isDarkMode ? "hover:bg-gray-700" : "hover:bg-gray-100"
             } transition-colors`}
           >
             <Settings className="w-5 h-5" />
@@ -220,29 +268,35 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
         {showSettings && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
+            animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             className={`mt-4 p-4 rounded-xl ${
-              isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
+              isDarkMode ? "bg-gray-700" : "bg-gray-50"
             }`}
           >
             <h3 className="font-semibold mb-3">Chat Settings</h3>
-            
+
             {/* Slow Mode Toggle */}
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="font-medium">Slow Mode</p>
-                <p className="text-sm text-gray-500">Limit how often users can send messages</p>
+                <p className="text-sm text-gray-500">
+                  Limit how often users can send messages
+                </p>
               </div>
               <button
                 onClick={toggleSlowMode}
                 className={`w-14 h-7 rounded-full transition-colors ${
-                  slowMode.enabled ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'
+                  slowMode.enabled
+                    ? "bg-blue-500"
+                    : "bg-gray-300 dark:bg-gray-600"
                 }`}
               >
-                <div className={`w-5 h-5 bg-white rounded-full transform transition-transform ${
-                  slowMode.enabled ? 'translate-x-8' : 'translate-x-1'
-                }`} />
+                <div
+                  className={`w-5 h-5 bg-white rounded-full transform transition-transform ${
+                    slowMode.enabled ? "translate-x-8" : "translate-x-1"
+                  }`}
+                />
               </button>
             </div>
 
@@ -258,7 +312,9 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
                   max="60"
                   step="5"
                   value={slowMode.interval}
-                  onChange={(e) => updateSlowModeInterval(parseInt(e.target.value))}
+                  onChange={(e) =>
+                    updateSlowModeInterval(parseInt(e.target.value))
+                  }
                   className="w-full"
                 />
                 <div className="flex justify-between text-xs text-gray-500 mt-1">
@@ -272,7 +328,11 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4" ref={messagesContainerRef} onScroll={handleScroll}>
+      <div
+        className="flex-1 overflow-y-auto p-6 space-y-4"
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+      >
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <MapPin className="w-16 h-16 mb-4 opacity-20" />
@@ -293,11 +353,17 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
       </div>
 
       {/* Input */}
-      <div className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t p-6`}>
+      <div
+        className={`${
+          isDarkMode
+            ? "bg-gray-800 border-gray-700"
+            : "bg-white border-gray-200"
+        } border-t p-6`}
+      >
         <ChatInput
           isDarkMode={isDarkMode}
           onSendMessage={handleSendMessage}
-          disabled={!user || !user.region}
+          disabled={!user || !userRegion}
           slowModeActive={slowMode.enabled && slowModeRemaining > 0}
           slowModeRemaining={slowModeRemaining}
         />
