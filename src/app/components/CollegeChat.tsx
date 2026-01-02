@@ -12,7 +12,6 @@ import {
   addDoc, 
   query, 
   where,
-  orderBy, 
   onSnapshot, 
   serverTimestamp,
   updateDoc,
@@ -42,10 +41,11 @@ export function CollegeChat({ isDarkMode }: { isDarkMode: boolean }) {
     if (!user?.college) return;
 
     // Query messages for this specific college
+    // Note: Not using orderBy in query to avoid needing a composite index
+    // We sort client-side instead
     const q = query(
       collection(db, "college_chat"), 
-      where("college", "==", user.college),
-      orderBy("createdAt", "asc")
+      where("college", "==", user.college)
     );
 
     // Listen for real-time updates
@@ -65,7 +65,11 @@ export function CollegeChat({ isDarkMode }: { isDarkMode: boolean }) {
           college: data.college,
         } as ChatMessageType;
       });
+      // Sort messages by timestamp client-side (ascending order - oldest first)
+      liveMessages.sort((a, b) => a.timestamp - b.timestamp);
       setMessages(liveMessages);
+    }, (error) => {
+      console.error("CollegeChat snapshot error:", error);
     });
 
     loadSlowMode();

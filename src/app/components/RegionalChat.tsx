@@ -16,7 +16,6 @@ import {
   addDoc,
   query,
   where,
-  orderBy,
   onSnapshot,
   serverTimestamp,
   updateDoc,
@@ -49,10 +48,11 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
     if (!userRegion) return;
 
     // Query messages for this specific region/state
+    // Note: Not using orderBy in query to avoid needing a composite index
+    // We sort client-side instead
     const q = query(
       collection(db, "regional_chat"),
-      where("state", "==", userRegion),
-      orderBy("createdAt", "asc")
+      where("state", "==", userRegion)
     );
 
     // Listen for real-time updates
@@ -72,7 +72,11 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
           region: data.state,
         } as ChatMessageType;
       });
+      // Sort messages by timestamp client-side (ascending order - oldest first)
+      liveMessages.sort((a, b) => a.timestamp - b.timestamp);
       setMessages(liveMessages);
+    }, (error) => {
+      console.error("RegionalChat snapshot error:", error);
     });
 
     loadSlowMode();
