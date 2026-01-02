@@ -10,6 +10,7 @@ export interface ChatMessage {
   pollData?: PollData;
   region?: string;
   college?: string;
+  isEdited?: boolean;
 }
 
 export interface PollData {

@@ -19,6 +19,7 @@ import {
   onSnapshot,
   serverTimestamp,
   updateDoc,
+  deleteDoc,
   doc,
   arrayUnion,
 } from "firebase/firestore";
@@ -211,6 +212,33 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
     }
   };
 
+  // Edit message handler
+  const handleEditMessage = async (messageId: string, newText: string) => {
+    if (!user) return;
+    
+    try {
+      const msgRef = doc(db, "regional_chat", messageId);
+      await updateDoc(msgRef, {
+        message: newText,
+        isEdited: true
+      });
+    } catch (error) {
+      console.error("Error editing message:", error);
+    }
+  };
+
+  // Delete message handler
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!user) return;
+    
+    try {
+      const msgRef = doc(db, "regional_chat", messageId);
+      await deleteDoc(msgRef);
+    } catch (error) {
+      console.error("Error deleting message:", error);
+    }
+  };
+
   const toggleSlowMode = () => {
     const newSettings = {
       ...slowMode,
@@ -350,6 +378,8 @@ export function RegionalChat({ isDarkMode }: { isDarkMode: boolean }) {
               isDarkMode={isDarkMode}
               isOwn={msg.userId === user?.id}
               onVotePoll={handleVotePoll}
+              onEditMessage={handleEditMessage}
+              onDeleteMessage={handleDeleteMessage}
             />
           ))
         )}

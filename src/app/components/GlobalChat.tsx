@@ -16,6 +16,7 @@ import {
   onSnapshot, 
   serverTimestamp,
   updateDoc,
+  deleteDoc,
   doc,
   arrayUnion
 } from "firebase/firestore";
@@ -197,6 +198,33 @@ export function GlobalChat({ isDarkMode }: { isDarkMode: boolean }) {
     }
   };
 
+  // --- NEW: EDIT MESSAGE ---
+  const handleEditMessage = async (messageId: string, newText: string) => {
+    if (!user) return;
+    
+    try {
+      const msgRef = doc(db, "global_chat", messageId);
+      await updateDoc(msgRef, {
+        message: newText,
+        isEdited: true
+      });
+    } catch (error) {
+      console.error("Error editing message:", error);
+    }
+  };
+
+  // --- NEW: DELETE MESSAGE ---
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!user) return;
+    
+    try {
+      const msgRef = doc(db, "global_chat", messageId);
+      await deleteDoc(msgRef);
+    } catch (error) {
+      console.error("Error deleting message:", error);
+    }
+  };
+
   const toggleSlowMode = () => {
     const newSettings = { ...slowMode, enabled: !slowMode.enabled };
     saveSlowMode(newSettings);
@@ -310,6 +338,8 @@ export function GlobalChat({ isDarkMode }: { isDarkMode: boolean }) {
               isDarkMode={isDarkMode}
               isOwn={msg.userId === user?.id}
               onVotePoll={handleVotePoll}
+              onEditMessage={handleEditMessage}
+              onDeleteMessage={handleDeleteMessage}
             />
           ))
         )}
