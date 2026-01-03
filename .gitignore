@@ -62,3 +62,5 @@ typings/
 # production build
 dist
 dist-ssr
+# Local Netlify folder
+.netlify

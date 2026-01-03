@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "netlify dev",
+    "vite:dev": "vite"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
