@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Mail, X, Loader2, CheckCircle, RefreshCw, Eye, AlertCircle } from "lucide-react";
+import { Mail, X, Loader2, CheckCircle, RefreshCw } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "./ui/input-otp";
-import { verifyOTP, sendOTPEmail, getOTPRemainingTime, canResendOTP } from "../services/emailOTPService";
 import { toast } from "sonner";
 
 interface OTPVerificationModalProps {
@@ -27,7 +26,6 @@ export function OTPVerificationModal({
   const [remainingTime, setRemainingTime] = useState(0);
   const [canResend, setCanResend] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [demoOTP, setDemoOTP] = useState<string | null>(null); // Store OTP for demo mode
 
   // Send OTP when modal opens
   useEffect(() => {
@@ -38,42 +36,48 @@ export function OTPVerificationModal({
 
   // Timer for OTP expiry
   useEffect(() => {
-    if (!isOpen || isVerified) return;
+    if (!isOpen || isVerified || remainingTime <= 0) return;
 
     const interval = setInterval(() => {
-      const remaining = getOTPRemainingTime(email);
-      setRemainingTime(remaining);
-      setCanResend(canResendOTP(email));
-      
-      if (remaining <= 0) {
-        setError("OTP has expired. Please request a new one.");
-      }
+      setRemainingTime((prev) => {
+        if (prev <= 1) {
+          setCanResend(true);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isOpen, isVerified, email]);
+  }, [isOpen, isVerified, remainingTime]);
 
   const handleSendOTP = async () => {
     setIsSending(true);
     setError(null);
-    
+    setOtp(""); // Clear previous input
+
     try {
-      const result = await sendOTPEmail(email, userName);
-      if (result.success) {
-        toast.success("Verification code generated!");
-        setRemainingTime(300); // 5 minutes
+      // Call Netlify Function
+      const response = await fetch('/.netlify/functions/sendOtp', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success("Verification code sent to your email!");
+        setRemainingTime(300); // Reset timer to 5 minutes
         setCanResend(false);
-        // Store OTP if returned (demo mode)
-        if (result.otp) {
-          setDemoOTP(result.otp);
-        }
       } else {
-        toast.error(result.message);
-        setError(result.message);
+        throw new Error(data.error || "Failed to send OTP");
       }
-    } catch (err) {
-      toast.error("Failed to generate OTP");
-      setError("Failed to generate OTP. Please try again.");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Failed to generate OTP");
+      setError(err.message || "Failed to generate OTP. Please try again.");
+      setCanResend(true); // Allow retry if it failed
     } finally {
       setIsSending(false);
     }
@@ -88,25 +92,34 @@ export function OTPVerificationModal({
     setIsVerifying(true);
     setError(null);
 
-    // Small delay for UX
-    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      // Call Netlify Function to Verify
+      const response = await fetch('/.netlify/functions/verifyOtp', {
+        method: 'POST',
+        body: JSON.stringify({ email, otp }),
+        headers: { 'Content-Type': 'application/json' }
+      });
 
-    const result = verifyOTP(email, otp);
-    
-    if (result.valid) {
-      setIsVerified(true);
-      toast.success(result.message);
-      
-      // Notify parent after a brief delay
-      setTimeout(() => {
-        onVerified();
-      }, 1500);
-    } else {
-      setError(result.message);
-      toast.error(result.message);
+      const data = await response.json();
+
+      if (response.ok) {
+        setIsVerified(true);
+        toast.success("Email Verified Successfully!");
+        
+        // Notify parent after a brief delay
+        setTimeout(() => {
+          onVerified();
+        }, 1500);
+      } else {
+        throw new Error(data.error || "Verification failed");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Invalid OTP");
+      toast.error(err.message || "Invalid OTP");
+    } finally {
+      setIsVerifying(false);
     }
-    
-    setIsVerifying(false);
   };
 
   const formatTime = (seconds: number) => {
@@ -162,33 +175,11 @@ export function OTPVerificationModal({
             
             {!isVerified && (
               <p className="text-gray-600 dark:text-gray-400 text-sm">
-                Enter the 6-digit code below to verify<br />
+                Enter the 6-digit code sent to<br />
                 <span className="font-semibold text-gray-900 dark:text-gray-100">{email}</span>
               </p>
             )}
           </div>
-
-          {/* Demo Mode OTP Display */}
-          {!isVerified && demoOTP && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-400 dark:border-amber-500 rounded-2xl"
-            >
-              <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 mb-2">
-                <AlertCircle className="w-5 h-5" />
-                <span className="font-semibold text-sm">Demo Mode - Your OTP Code:</span>
-              </div>
-              <div className="flex items-center justify-center gap-2">
-                <code className="text-3xl font-bold tracking-[0.5em] text-amber-800 dark:text-amber-300">
-                  {demoOTP}
-                </code>
-              </div>
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 text-center">
-                In production, this code would be sent to your email
-              </p>
-            </motion.div>
-          )}
 
           {!isVerified ? (
             <>
@@ -242,7 +233,7 @@ export function OTPVerificationModal({
                   ) : (
                     <>
                       <RefreshCw className="w-4 h-4" />
-                      {canResend ? "Resend OTP" : "Resend in 60s"}
+                      {canResend ? "Resend OTP" : `Resend in ${remainingTime}s`}
                     </>
                   )}
                 </button>
