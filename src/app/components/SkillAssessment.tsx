@@ -9,7 +9,8 @@ import {
   Target,
   Zap,
   Clock,
-  Award
+  Award,
+  Sparkles
 } from "lucide-react";
 
 interface AssessmentQuestion {
@@ -853,6 +854,14 @@ export function SkillAssessment({ careerStream, isDarkMode, onComplete, onSkip }
 
   const questions = assessmentQuestions[careerStream] || assessmentQuestions["Software Development"];
 
+  // Lock body scroll when component is mounted
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
+
   useEffect(() => {
     if (showResults || timeRemaining <= 0) return;
 
@@ -951,10 +960,16 @@ export function SkillAssessment({ careerStream, isDarkMode, onComplete, onSkip }
     
     return (
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className={`max-w-3xl mx-auto p-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-xl`}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
       >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className={`max-w-3xl w-full p-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-xl my-8`}
+        >
         <div className="text-center">
           <motion.div
             initial={{ scale: 0 }}
@@ -1062,6 +1077,7 @@ export function SkillAssessment({ careerStream, isDarkMode, onComplete, onSkip }
             Generating your personalized roadmap...
           </motion.p>
         </div>
+        </motion.div>
       </motion.div>
     );
   }
@@ -1069,184 +1085,196 @@ export function SkillAssessment({ careerStream, isDarkMode, onComplete, onSkip }
   const currentQ = questions[currentQuestion];
 
   return (
-    <div className="max-w-4xl mx-auto">
-      {/* Header */}
-      <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-sm p-8 mb-6`}>
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
-              <Brain className="w-6 h-6 text-white" />
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className={`max-w-4xl w-full max-h-[90vh] overflow-y-auto ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} rounded-2xl p-6`}
+      >
+        {/* Header */}
+        <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-sm p-8 mb-6`}>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
+                <Brain className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold">Skill Assessment</h2>
+                <p className="text-sm text-gray-500">{careerStream}</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-bold">Skill Assessment</h2>
-              <p className="text-sm text-gray-500">{careerStream}</p>
+
+            <div className="flex items-center gap-4">
+              {/* Timer */}
+              <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+                timeRemaining < 60 ? 'bg-red-500/10 text-red-500' : 'bg-blue-500/10 text-blue-500'
+              }`}>
+                <Clock className="w-5 h-5" />
+                <span className="font-semibold">{formatTime(timeRemaining)}</span>
+              </div>
+
+              {/* Skip Button */}
+              <button
+                onClick={onSkip}
+                className={`px-4 py-2 rounded-lg ${
+                  isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'
+                } transition-colors`}
+              >
+                Skip Assessment
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            {/* Timer */}
-            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
-              timeRemaining < 60 ? 'bg-red-500/10 text-red-500' : 'bg-blue-500/10 text-blue-500'
+          {/* Progress Bar */}
+          <div className="mb-4">
+            <div className="flex justify-between text-sm mb-2">
+              <span className="text-gray-500">Question {currentQuestion + 1} of {questions.length}</span>
+              <span className="text-gray-500">{answeredCount} answered</span>
+            </div>
+            <div className={`h-2 rounded-full ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} overflow-hidden`}>
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.3 }}
+                className="h-full bg-gradient-to-r from-purple-500 to-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* Difficulty Badge */}
+          <div className="flex items-center gap-2">
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+              currentQ.difficulty === 'easy'
+                ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                : currentQ.difficulty === 'medium'
+                ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                : 'bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300'
             }`}>
-              <Clock className="w-5 h-5" />
-              <span className="font-semibold">{formatTime(timeRemaining)}</span>
-            </div>
-
-            {/* Skip Button */}
-            <button
-              onClick={onSkip}
-              className={`px-4 py-2 rounded-lg ${
-                isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'
-              } transition-colors`}
-            >
-              Skip Assessment
-            </button>
+              {currentQ.difficulty.charAt(0).toUpperCase() + currentQ.difficulty.slice(1)}
+            </span>
           </div>
         </div>
 
-        {/* Progress Bar */}
-        <div className="mb-4">
-          <div className="flex justify-between text-sm mb-2">
-            <span className="text-gray-500">Question {currentQuestion + 1} of {questions.length}</span>
-            <span className="text-gray-500">{answeredCount} answered</span>
-          </div>
-          <div className={`h-2 rounded-full ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} overflow-hidden`}>
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
-              transition={{ duration: 0.3 }}
-              className="h-full bg-gradient-to-r from-purple-500 to-blue-500"
-            />
-          </div>
-        </div>
+        {/* Question */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentQuestion}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+            className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-sm p-8 mb-6`}
+          >
+            <h3 className="text-xl font-semibold mb-6">{currentQ.question}</h3>
 
-        {/* Difficulty Badge */}
-        <div className="flex items-center gap-2">
-          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-            currentQ.difficulty === 'easy'
-              ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300'
-              : currentQ.difficulty === 'medium'
-              ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
-              : 'bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300'
-          }`}>
-            {currentQ.difficulty.charAt(0).toUpperCase() + currentQ.difficulty.slice(1)}
-          </span>
-        </div>
-      </div>
-
-      {/* Question */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentQuestion}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.3 }}
-          className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-sm p-8 mb-6`}
-        >
-          <h3 className="text-xl font-semibold mb-6">{currentQ.question}</h3>
-
-          <div className="space-y-3">
-            {currentQ.options.map((option, index) => {
-              const isSelected = selectedAnswers[currentQ.id] === index;
-              
-              return (
-                <button
-                  key={index}
-                  onClick={() => handleAnswerSelect(currentQ.id, index)}
-                  className={`w-full text-left p-4 rounded-xl transition-all ${
-                    isSelected
-                      ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg scale-[1.02]'
-                      : isDarkMode
-                      ? 'bg-gray-700 hover:bg-gray-600'
-                      : 'bg-gray-50 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+            <div className="space-y-3">
+              {currentQ.options.map((option, index) => {
+                const isSelected = selectedAnswers[currentQ.id] === index;
+                
+                return (
+                  <button
+                    key={index}
+                    onClick={() => handleAnswerSelect(currentQ.id, index)}
+                    className={`w-full text-left p-4 rounded-xl transition-all ${
                       isSelected
-                        ? 'border-white bg-white'
+                        ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg scale-[1.02]'
                         : isDarkMode
-                        ? 'border-gray-500'
-                        : 'border-gray-300'
-                    }`}>
-                      {isSelected && <CheckCircle className="w-5 h-5 text-purple-500" />}
+                        ? 'bg-gray-700 hover:bg-gray-600'
+                        : 'bg-gray-50 hover:bg-gray-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                        isSelected
+                          ? 'border-white bg-white'
+                          : isDarkMode
+                          ? 'border-gray-500'
+                          : 'border-gray-300'
+                      }`}>
+                        {isSelected && <CheckCircle className="w-5 h-5 text-purple-500" />}
+                      </div>
+                      <span className={`${isSelected ? 'font-semibold' : ''}`}>{option}</span>
                     </div>
-                    <span className={`${isSelected ? 'font-semibold' : ''}`}>{option}</span>
-                  </div>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Navigation */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={handlePrevious}
+            disabled={currentQuestion === 0}
+            className={`px-6 py-3 rounded-xl font-medium transition-all ${
+              currentQuestion === 0
+                ? 'opacity-50 cursor-not-allowed'
+                : isDarkMode
+                ? 'bg-gray-700 hover:bg-gray-600'
+                : 'bg-gray-100 hover:bg-gray-200'
+            }`}
+          >
+            Previous
+          </button>
+
+          <div className="flex gap-3">
+            {currentQuestion < questions.length - 1 ? (
+              <button
+                onClick={handleNext}
+                className="px-6 py-3 rounded-xl font-medium bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:shadow-lg transition-all flex items-center gap-2"
+              >
+                Next
+                <ArrowRight className="w-5 h-5" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={answeredCount < questions.length}
+                className={`px-8 py-3 rounded-xl font-medium transition-all flex items-center gap-2 ${
+                  answeredCount < questions.length
+                    ? 'opacity-50 cursor-not-allowed bg-gray-400'
+                    : 'bg-gradient-to-r from-green-500 to-teal-500 text-white hover:shadow-lg'
+                }`}
+              >
+                Submit Assessment
+                <CheckCircle className="w-5 h-5" />
+              </button>
+            )}
           </div>
-        </motion.div>
-      </AnimatePresence>
-
-      {/* Navigation */}
-      <div className="flex items-center justify-between">
-        <button
-          onClick={handlePrevious}
-          disabled={currentQuestion === 0}
-          className={`px-6 py-3 rounded-xl font-medium transition-all ${
-            currentQuestion === 0
-              ? 'opacity-50 cursor-not-allowed'
-              : isDarkMode
-              ? 'bg-gray-700 hover:bg-gray-600'
-              : 'bg-gray-100 hover:bg-gray-200'
-          }`}
-        >
-          Previous
-        </button>
-
-        <div className="flex gap-3">
-          {currentQuestion < questions.length - 1 ? (
-            <button
-              onClick={handleNext}
-              className="px-6 py-3 rounded-xl font-medium bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:shadow-lg transition-all flex items-center gap-2"
-            >
-              Next
-              <ArrowRight className="w-5 h-5" />
-            </button>
-          ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={answeredCount < questions.length}
-              className={`px-8 py-3 rounded-xl font-medium transition-all flex items-center gap-2 ${
-                answeredCount < questions.length
-                  ? 'opacity-50 cursor-not-allowed bg-gray-400'
-                  : 'bg-gradient-to-r from-green-500 to-teal-500 text-white hover:shadow-lg'
-              }`}
-            >
-              Submit Assessment
-              <CheckCircle className="w-5 h-5" />
-            </button>
-          )}
         </div>
-      </div>
 
-      {/* Answer Status */}
-      <div className={`mt-6 p-4 rounded-xl ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
-        <div className="flex flex-wrap gap-2">
-          {questions.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => setCurrentQuestion(index)}
-              className={`w-10 h-10 rounded-lg font-medium transition-all ${
-                selectedAnswers[questions[index].id] !== undefined
-                  ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white'
-                  : index === currentQuestion
-                  ? isDarkMode
-                    ? 'bg-gray-600 text-white'
-                    : 'bg-gray-300 text-gray-900'
-                  : isDarkMode
-                  ? 'bg-gray-700 text-gray-400 hover:bg-gray-600'
-                  : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
-              }`}
-            >
-              {index + 1}
-            </button>
-          ))}
+        {/* Answer Status */}
+        <div className={`mt-6 p-4 rounded-xl ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
+          <div className="flex flex-wrap gap-2">
+            {questions.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => setCurrentQuestion(index)}
+                className={`w-10 h-10 rounded-lg font-medium transition-all ${
+                  selectedAnswers[questions[index].id] !== undefined
+                    ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white'
+                    : index === currentQuestion
+                    ? isDarkMode
+                      ? 'bg-gray-600 text-white'
+                      : 'bg-gray-300 text-gray-900'
+                    : isDarkMode
+                    ? 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                    : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
+                }`}
+              >
+                {index + 1}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
+

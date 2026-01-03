@@ -32,6 +32,9 @@ import { CollegeChat } from "./CollegeChat";
 import { PersonalSpace } from "./PersonalSpace";
 import { CollegeVerificationModal } from "./CollegeVerificationModal";
 import { ProfileDropdown } from "./ProfileDropdown";
+import { ProgressSection } from "./ProgressSection";
+import { MentorshipSection } from "./MentorshipSection";
+import { ProfileSection } from "./ProfileSection";
 
 export function StudentDashboard() {
   const { user, logout, updateUserId } = useAuth();
@@ -273,8 +276,17 @@ export function StudentDashboard() {
           {activeTab === "college" && <CollegeChat isDarkMode={isDarkMode} />}
           {activeTab === "personal" && <PersonalSpace isDarkMode={isDarkMode} />}
 
-          {/* Render Dashboard and other tabs */}
-          {(activeTab === "dashboard" || activeTab === "progress" || activeTab === "mentorship" || activeTab === "profile") && (
+          {/* Render Progress Section */}
+          {activeTab === "progress" && <ProgressSection isDarkMode={isDarkMode} />}
+
+          {/* Render Mentorship Section */}
+          {activeTab === "mentorship" && <MentorshipSection isDarkMode={isDarkMode} />}
+
+          {/* Render Profile Section */}
+          {activeTab === "profile" && <ProfileSection isDarkMode={isDarkMode} />}
+
+          {/* Render Dashboard */}
+          {activeTab === "dashboard" && (
             <div className="h-full overflow-y-auto p-8">
               {/* Page Header */}
               <div className="flex items-center justify-between mb-6">

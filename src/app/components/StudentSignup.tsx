@@ -1,8 +1,9 @@
 import { motion } from "motion/react";
 import { useState, useEffect } from "react";
-import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowLeft, BookOpen, Calendar, MapPin, User, Phone } from "lucide-react";
+import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowLeft, BookOpen, Calendar, MapPin, User, Phone, CheckCircle } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { CollegeSearchDropdown } from "./CollegeSearchDropdown";
+import { OTPVerificationModal } from "./OTPVerificationModal";
 
 interface StudentSignupProps {
   onBack: () => void;
@@ -30,7 +31,14 @@ export function StudentSignup({ onBack, onSwitchToLogin, userLocation }: Student
   const [locationError, setLocationError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [showOTPModal, setShowOTPModal] = useState(false);
   const { signup } = useAuth();
+
+  // Reset email verification when email changes
+  useEffect(() => {
+    setIsEmailVerified(false);
+  }, [formData.email]);
 
   useEffect(() => {
     // Auto-fill region based on location
@@ -101,6 +109,12 @@ export function StudentSignup({ onBack, onSwitchToLogin, userLocation }: Student
     e.preventDefault();
     setError(null);
     
+    // Validate email is verified
+    if (!isEmailVerified) {
+      setError("Please verify your email address first!");
+      return;
+    }
+    
     // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match!");
@@ -116,6 +130,26 @@ export function StudentSignup({ onBack, onSwitchToLogin, userLocation }: Student
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleVerifyEmail = () => {
+    // Validate email format before opening modal
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!formData.email.trim()) {
+      setError("Please enter your email address");
+      return;
+    }
+    if (!emailRegex.test(formData.email)) {
+      setError("Please enter a valid email address");
+      return;
+    }
+    setError(null);
+    setShowOTPModal(true);
+  };
+
+  const handleEmailVerified = () => {
+    setIsEmailVerified(true);
+    setShowOTPModal(false);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -199,23 +233,47 @@ export function StudentSignup({ onBack, onSwitchToLogin, userLocation }: Student
               </div>
             </div>
 
-            {/* Email Field */}
+            {/* Email Field with Verify Button */}
             <div>
               <label htmlFor="email" className="block font-semibold text-gray-700 dark:text-gray-300 mb-2">
                 Email Address
+                {isEmailVerified && (
+                  <span className="ml-2 text-green-600 dark:text-green-400 text-sm">
+                    ✓ Verified
+                  </span>
+                )}
               </label>
-              <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 dark:text-gray-400" />
-                <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  required
-                  className="w-full pl-12 pr-4 py-3 rounded-2xl border-2 border-gray-900 dark:border-gray-100 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:focus:ring-blue-600 transition-all"
-                  placeholder="your.email@example.com"
-                />
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 dark:text-gray-400" />
+                  <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    required
+                    disabled={isEmailVerified}
+                    className={`w-full pl-12 pr-4 py-3 rounded-2xl border-2 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:focus:ring-blue-600 transition-all ${
+                      isEmailVerified 
+                        ? 'border-green-500 dark:border-green-400 bg-green-50 dark:bg-green-900/20' 
+                        : 'border-gray-900 dark:border-gray-100'
+                    }`}
+                    placeholder="your.email@example.com"
+                  />
+                  {isEmailVerified && (
+                    <CheckCircle className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500" />
+                  )}
+                </div>
+                {!isEmailVerified && (
+                  <button
+                    type="button"
+                    onClick={handleVerifyEmail}
+                    className="px-4 py-3 bg-gradient-to-r from-blue-400 to-cyan-400 dark:from-blue-500 dark:to-cyan-500 text-white font-semibold rounded-2xl border-2 border-gray-900 dark:border-gray-100 hover:shadow-lg transition-all whitespace-nowrap"
+                  >
+                    Verify
+                  </button>
+                )}
               </div>
             </div>
 
@@ -490,6 +548,15 @@ export function StudentSignup({ onBack, onSwitchToLogin, userLocation }: Student
           className="absolute bottom-20 left-10 w-16 h-16 bg-gradient-to-br from-yellow-300 to-orange-300 dark:from-yellow-500 dark:to-orange-500 rounded-[2rem] opacity-50 blur-sm -z-10"
         />
       </motion.div>
+
+      {/* OTP Verification Modal */}
+      <OTPVerificationModal
+        email={formData.email}
+        userName={formData.fullName}
+        isOpen={showOTPModal}
+        onClose={() => setShowOTPModal(false)}
+        onVerified={handleEmailVerified}
+      />
     </div>
   );
 }
